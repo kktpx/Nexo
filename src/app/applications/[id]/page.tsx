@@ -16,6 +16,9 @@ import { recommendProjects } from "@/lib/matching/projectMatcher";
 import { MatchScoreDisplay } from "@/components/applications/MatchScoreDisplay";
 import { RequirementsList } from "@/components/applications/RequirementsList";
 
+import { generateInterviewPrep } from "@/lib/parser/prepGenerator";
+import { InterviewPrepUI } from "@/components/applications/InterviewPrepUI";
+
 export default function ApplicationDetailPage() {
   const { id } = useParams() as { id: string };
   const router = useRouter();
@@ -39,11 +42,16 @@ export default function ApplicationDetailPage() {
     const parsed = parseJobDescription(application.jobDescription);
     const matchResult = calculateMatchScore(parsed.all, skills);
     const recommended = recommendProjects(parsed.all, projects, skills);
+    
+    // Convert ProjectMatchResult[] to Project[] for prep generator
+    const fullProjects = recommended.map(r => projects.find(p => p.id === r.projectId)).filter((p): p is typeof projects[0] => p !== undefined);
+    const prep = generateInterviewPrep(parsed.all, fullProjects);
 
     updateApplication(id, {
       requirements: parsed.all,
       matchResult,
       recommendedProjects: recommended,
+      interviewPrep: prep
     });
   };
 
@@ -52,11 +60,34 @@ export default function ApplicationDetailPage() {
     const matchResult = calculateMatchScore(newReqs, skills);
     const recommended = recommendProjects(newReqs, projects, skills);
     
+    const fullProjects = recommended.map(r => projects.find(p => p.id === r.projectId)).filter((p): p is typeof projects[0] => p !== undefined);
+    const prep = generateInterviewPrep(newReqs, fullProjects);
+
     updateApplication(id, {
       requirements: newReqs,
       matchResult,
       recommendedProjects: recommended,
+      interviewPrep: prep
     });
+  };
+
+  const handleTogglePrepTopic = (type: "technical" | "project", topicId: string) => {
+    if (!application.interviewPrep) return;
+    
+    const newPrep = { ...application.interviewPrep };
+    
+    if (type === "technical") {
+      newPrep.technicalTopics = newPrep.technicalTopics.map(t => 
+        t.id === topicId ? { ...t, completed: !t.completed } : t
+      );
+    } else {
+      newPrep.projectReviews = newPrep.projectReviews.map(r => ({
+        ...r,
+        items: r.items.map(i => i.id === topicId ? { ...i, completed: !i.completed } : i)
+      }));
+    }
+    
+    updateApplication(id, { interviewPrep: newPrep });
   };
 
   return (
@@ -127,10 +158,13 @@ export default function ApplicationDetailPage() {
             </div>
           )}
 
-          {/* Interview Prep Placeholder */}
-          <div id="interview-prep-placeholder" className="bg-white shadow rounded-lg p-6 border border-gray-200 border-dashed hidden">
-            Interview Prep will go here
-          </div>
+          {/* Interview Prep */}
+          {application.interviewPrep && (
+            <div className="bg-white shadow rounded-lg p-6 border border-gray-200">
+              <h2 className="text-lg font-medium text-gray-900 mb-4">Interview Preparation</h2>
+              <InterviewPrepUI prep={application.interviewPrep} onToggleTopic={handleTogglePrepTopic} />
+            </div>
+          )}
 
           {/* Job Description */}
           <div className="bg-white shadow rounded-lg p-6 border border-gray-200">
